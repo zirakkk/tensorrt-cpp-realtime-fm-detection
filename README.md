@@ -1,4 +1,4 @@
-# TensorRT Hyperspectral Inference Engine
+# TensorRT C++ Hyperspectral FM Detection Inference Pipeline
 
 [![CUDA](https://img.shields.io/badge/CUDA-12.2-76B900.svg)](https://developer.nvidia.com/cuda-toolkit)
 [![TensorRT](https://img.shields.io/badge/TensorRT-10.6-76B900.svg)](https://developer.nvidia.com/tensorrt)
@@ -37,32 +37,28 @@ The central inference orchestrator that manages:
 #### Inference Pipeline
 ```
 ┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐
-│ Input Data  │ → │ Preprocess  │ → │ GPU Inference│ → │ Postprocess │
+│ Input Data  │ →  │ Preprocess  │ →  │GPU Inference│  → │ Postprocess │
 └─────────────┘    └─────────────┘    └─────────────┘    └─────────────┘
        ↑                                                        ↓
-┌─────────────┐                                         ┌─────────────┐
-│ ENVI Files  │                                         │ Visualization│
-└─────────────┘                                         └─────────────┘
+┌─────────────┐                                          ┌─────────────┐
+│ ENVI Files  │                                          │Visualization│
+└─────────────┘                                          └─────────────┘
 ```
 
 ## 💻 Performance Optimizations
 
 | Technique | Implementation | Benefit |
 |-----------|----------------|---------|
-| **Pinned Memory** | `cudaMallocHost` for host buffers | 2-3x faster host-device transfers |
-| **Asynchronous Execution** | CUDA streams with callbacks | Overlapped computation and I/O |
+| **Pinned Memory** | `cudaMallocHost` for host buffers | Eliminates extra staging copy → up to ~2×–3× higher H2D throughput and enables true async transfers 2-3x faster host-device transfers |
+| **Asynchronous Execution** | CUDA streams with callbacks | Overlaps kernel execution and data movement, hiding transfer latency |
 | **Batch Optimization** | Dynamic batch sizing | Maximum GPU utilization |
-| **Memory Layout** | Contiguous tensor storage | Reduced cache misses |
-| **Minimal Restructuring** | Optimized tensor reshaping | Lower CPU overhead |
 
 ## 📊 Benchmarks
 
 | Batch Size | Inference Time | Memory Transfer | Total Latency |
 |------------|----------------|-----------------|---------------|
-| 1          | 0.5 ms         | 0.1 ms          | 0.6 ms        |
-| 1,000      | 1.2 ms         | 0.3 ms          | 1.5 ms        |
-| 10,000     | 3.8 ms         | 1.1 ms          | 4.9 ms        |
-| 100,000    | 28.5 ms        | 8.2 ms          | 36.7 ms       |
+| 145222     | ~29 ms         | ~9 ms           | ~38 ms        |
+
 
 *Measured on NVIDIA RTX 3090, TensorRT 10.6, CUDA 12.2*
 
@@ -79,7 +75,7 @@ The central inference orchestrator that manages:
 
 ### Model Preparation
 ```bash
-# Convert ONNX model to TensorRT engine
+# Convert pre-trained ONNX model to TensorRT engine
 trtexec --onnx=./NirEncD_MuscleFixed.onnx \
         --minShapes=input:1x96x1 \
         --optShapes=input:145222x96x1 \
@@ -91,11 +87,9 @@ trtexec --onnx=./NirEncD_MuscleFixed.onnx \
 ### C++ Integration
 ```cpp
 // Configure engine options
-Options options;
 options.precision = Precision::FP16;
 options.optBatchSize = 145222;
 options.maxBatchSize = 500000;
-options.maxWorkspaceSize = 3000000000;  // 3GB workspace
 
 // Initialize engine
 Engine engine(options);
@@ -106,56 +100,21 @@ if (!engine.loadNetwork("path/to/model.plan")) {
     return -1;
 }
 
-// Prepare input data - [batch][96][1] format
-std::vector<std::vector<std::vector<float>>> inputs = prepareInputData();
+// Prepare input data - [Input Tensor][batchsize][96 bands] format
+std::vector<std::vector<std::vector<float>>> inputs = createInputsFromENVIFile();
 
 // Run inference
 std::vector<float> results;
-if (!engine.runInference(inputs, results)) {
+if (!engine.runInference(inputs, output)) {
     std::cerr << "Inference failed" << std::endl;
     return -1;
 }
 
-// Process results
+// Process output
 // ...
 ```
 
-### Command Line Interface
-```bash
-Simulation.exe path/to/input.hyp path/to/model.plan
-```
-
-## 🔍 Advanced Configuration
-
-### Engine Options
-```cpp
-struct Options {
-    bool doesSupportDynamicBatchSize = true;
-    Precision precision = Precision::FP16;
-    int32_t optBatchSize = 145222;
-    int32_t maxBatchSize = 500000;
-    size_t maxWorkspaceSize = 3000000000;  // 3GB
-    int deviceIndex = 0;
-};
-```
-
-## 📚 Documentation
-
-- [API Reference](docs/api.md)
-- [Performance Tuning Guide](docs/performance.md)
-- [Model Conversion Workflow](docs/model_conversion.md)
-- [Troubleshooting](docs/troubleshooting.md)
-
-## 📄 License
-
-[Specify your license here]
-
-## 👥 Contributors
-
-[List of contributors]
-
-## 🔗 Related Projects
+## 🔗 Related Repositories
 
 - [TensorRT Samples](https://github.com/NVIDIA/TensorRT)
 - [CUDA Samples](https://github.com/NVIDIA/cuda-samples)
-- [Hyperspectral Image Analysis](https://github.com/topics/hyperspectral-image)
