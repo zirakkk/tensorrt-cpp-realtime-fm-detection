@@ -27,7 +27,7 @@ The central inference orchestrator that manages:
 - TensorRT execution contexts and CUDA streams
 - GPU memory allocation and buffer management
 - Tensor dimension handling and shape inference
-- Optimized host-device data transfers
+- Optimized host-device and device-host data transfers
 
 #### Memory Management System
 - **Pinned Memory Allocator**: Uses CUDA page-locked memory for maximum bandwidth
